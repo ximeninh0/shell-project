@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define LSH_RL_BUFSIZE 1024
 #define LSH_TOK_BUFSIZE 64
@@ -25,6 +29,15 @@ char *lsh_read_line(void)
     }
 
     return line;
+}
+
+void pwd(){
+    char cwd[PATH_MAX];  // como se fosse um buffer para armazenar os caminhos | PATH_MAX eh o tamanho maximo de um caminho geralmente 4096, pelo menis em linux
+    if (getcwd(cwd, sizeof(cwd)) != NULL) { // getcwd eh uma funcao de unistd que chama o diretorio como 
+        printf("diretorio atual: %s\n", cwd);
+    } else {
+        perror("pwd");
+    }
 }
 
 char **lsh_split_line(char *line)
@@ -76,8 +89,12 @@ int main()
         line = lsh_read_line();
         args = lsh_split_line(line);
         printf("Comando executado: %s\n", line);
-    }
 
+        if (strcmp(line, "pwd") == 0){
+            pwd();
+            continue;
+        }
+    }
     printf("\n\n%s\n", line);
 
     printf("Hello World!");
