@@ -36,6 +36,7 @@ const char *commands_without_args[] = {
 const char *commands_with_flags[] = {
     "ls",
     NULL};
+// Transformar isso em hash tambem para relacionar o comando com os flags possíveis
 
 bool is_in_array(char *string, const char **vector);
 const char *find_option(const char *key, Option *options);
@@ -43,6 +44,7 @@ const char *find_option(const char *key, Option *options);
 char *lsh_read_line(void);
 char **lsh_split_line(char *line);
 void header();
+void small_header();
 void help();
 
 void execute(char **args, int *status);
@@ -92,7 +94,7 @@ int main()
             {
                 if (args[1] == NULL)
                 {
-                    printf("shell: Invalid arguments\n");
+                    printf("crash: Invalid arguments\n");
                     printf("usage: %s <args>\n", args[0]);
                 } else {
                     // Verifica os argumentos ou só executa
@@ -215,13 +217,13 @@ void execute(char **args, int *status)
     {
         if (execvp(args[0], args) == -1)
         {
-            perror("shell");
+            perror("crash");
         }
         exit(EXIT_FAILURE);
     }
     else if (pid < 0)
     {
-        perror("shell");
+        perror("crash");
     }
     else
     {
@@ -231,5 +233,33 @@ void execute(char **args, int *status)
 }
 void help()
 {
-    printf("Help Command");
+    small_header();
+    
+    printf("Comandos disponíveis:\n\n");
+    printf("Comandos sem argumentos:\n");
+    for(int i=0; commands_without_args[i] != NULL; i++) {
+        printf("- %s\n", commands_without_args[i]);
+    }
+    printf("Comandos com argumentos:\n");
+    for(int i=0; commands_with_args[i] != NULL; i++) {
+        printf("- %s\n", commands_with_args[i]);
+    }
+    printf("Comandos com flags:\n");
+    for(int i=0; commands_with_flags[i] != NULL; i++) {
+        printf("- %s\n", commands_with_flags[i]);
+    }
+
 }
+void small_header() {
+    printf("CRASH\n");
+}
+
+/**
+ * To Do
+ * 
+ * - Transformar o commands_with_flags em um hash, podendo ter o comando e o hash das flags possíveis
+ * - Verificar os argumentos
+ * - Verificar os flags
+ * - Executar um arquivo
+ * - Lançar um erro se o comando ou arquivo não existir
+ */
