@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <stdbool.h>
+#include <linux/limits.h>
+#include <sys/utsname.h>
 
 #define LSH_RL_BUFSIZE 1024
 #define LSH_TOK_BUFSIZE 64
@@ -55,6 +57,7 @@ void small_header();
 void help();
 
 void execute(char **args, int *status);
+void show_device_name();
 
 int main()
 {
@@ -66,7 +69,17 @@ int main()
 
     do
     {
-        printf("> ");
+
+        char cwd[PATH_MAX];
+
+        show_device_name();
+        if (getcwd(cwd, sizeof(cwd)) != NULL){
+            printf("%s> ", cwd);
+        }else{
+            printf("getcwdError ");
+            printf("> ");
+        }
+        
         line = lsh_read_line();
         args = lsh_split_line(line);
 
@@ -127,6 +140,7 @@ int main()
                         printf("crash: invalid flags\n");
                         continue;
                     }
+                    
                     execute(args, &status);
                     continue;
                 }
@@ -256,6 +270,7 @@ void execute(char **args, int *status)
         printf("\n");
     }
 }
+
 void help()
 {
     small_header();
@@ -304,6 +319,18 @@ const CommandFlags *find_command(const char *command, const CommandFlags *comman
     return NULL;
 }
 
+void show_device_name(){
+    struct utsname buffer;
+    
+    // Obtém informações do sistema
+    if (uname(&buffer) != 0) {
+        perror("Erro ao obter informações do sistema");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Exibe o nome do nó (hostname)
+    printf("\033[1m\033[32m%s\033[0m:", buffer.nodename);
+}
 /**
  * To Do
  *
