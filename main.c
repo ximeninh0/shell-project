@@ -14,11 +14,21 @@ typedef struct
     const char *key;
     const char *value;
 } Option;
-// Serve como um hash simples
+// Serve como um dicionário simples
 
-Option ls_options[] = {
+typedef struct
+{
+    const char *command;
+    const Option *flags;
+} CommandFlags;
+
+const Option ls_options[] = {
     {"-l", "Listar"},
     {"-a", "Mostrar todos"},
+    {NULL, NULL}};
+
+const CommandFlags commands_with_flags[] = {
+    {"ls", ls_options},
     {NULL, NULL}};
 
 const char *commands_with_args[] = {
@@ -33,13 +43,10 @@ const char *commands_without_args[] = {
     "help",
     NULL};
 
-const char *commands_with_flags[] = {
-    "ls",
-    NULL};
-// Transformar isso em hash tambem para relacionar o comando com os flags possíveis
-
 bool is_in_array(char *string, const char **vector);
-const char *find_option(const char *key, Option *options);
+bool is_in_command_flag(char *string, const CommandFlags *commands);
+const char *find_option(const char *key, const Option *options);
+const CommandFlags *find_command(const char *command, const CommandFlags *commands);
 
 char *lsh_read_line(void);
 char **lsh_split_line(char *line);
@@ -83,9 +90,10 @@ int main()
             if (strcmp(args[0], "help") == 0)
             {
                 help();
-            } else {
-                execute(args, &status);
+                continue;
             }
+
+            execute(args, &status);
         }
         else
         {
@@ -96,20 +104,35 @@ int main()
                 {
                     printf("crash: Invalid arguments\n");
                     printf("usage: %s <args>\n", args[0]);
-                } else {
-                    // Verifica os argumentos ou só executa
-                    execute(args, &status);
+                    continue;
                 }
+                // Verifica os argumentos ou só executa
+                execute(args, &status);
             }
             else
             {
-                bool is_command_with_flags = is_in_array(args[0], commands_with_flags);
-                if(is_command_with_flags) {
-                    // Verifica os argumentos
+                const CommandFlags *command = find_command(args[0], commands_with_flags);
+                if (command != NULL)
+                {
+                    const Option *flags = command->flags;
+                    bool is_valid = true;
+                    for (int i = 1; args[i] != NULL && is_valid == true; i++)
+                    {
+                        const char *opt = find_option(args[i], flags);
+                        if (opt == NULL)
+                            is_valid = false;
+                    }
+                    if (!is_valid)
+                    {
+                        printf("crash: invalid flags\n");
+                        continue;
+                    }
                     execute(args, &status);
-                } else {
-                    // Executa um arquivo ou da erro
+                    continue;
                 }
+
+                // Executa um arquivo ou da erro
+                printf("crash: invalid command\n");
             }
         }
 
@@ -139,7 +162,7 @@ char **lsh_split_line(char *line)
 
     if (!tokens)
     {
-        fprintf(stderr, "lsh: allocation error\n");
+        fprintf(stderr, "crash: allocation error\n");
         exit(EXIT_FAILURE);
     }
 
@@ -155,7 +178,7 @@ char **lsh_split_line(char *line)
             tokens = realloc(tokens, bufsize * sizeof(char *));
             if (!tokens)
             {
-                fprintf(stderr, "lsh: allocation error\n");
+                fprintf(stderr, "crash: allocation error\n");
                 exit(EXIT_FAILURE);
             }
         }
@@ -200,12 +223,14 @@ bool is_in_array(char *string, const char **vector)
     return is_in;
 }
 
-const char *find_option(const char *key, Option *options)
+const char *find_option(const char *key, const Option *options)
 {
     for (int i = 0; options[i].key != NULL; i++)
     {
         if (strcmp(options[i].key, key) == 0)
+        {
             return options[i].value;
+        }
     }
     return NULL;
 }
@@ -234,30 +259,54 @@ void execute(char **args, int *status)
 void help()
 {
     small_header();
-    
+
     printf("Comandos disponíveis:\n\n");
     printf("Comandos sem argumentos:\n");
-    for(int i=0; commands_without_args[i] != NULL; i++) {
+    for (int i = 0; commands_without_args[i] != NULL; i++)
+    {
         printf("- %s\n", commands_without_args[i]);
     }
     printf("Comandos com argumentos:\n");
-    for(int i=0; commands_with_args[i] != NULL; i++) {
+    for (int i = 0; commands_with_args[i] != NULL; i++)
+    {
         printf("- %s\n", commands_with_args[i]);
     }
     printf("Comandos com flags:\n");
-    for(int i=0; commands_with_flags[i] != NULL; i++) {
-        printf("- %s\n", commands_with_flags[i]);
+    for (int i = 0; commands_with_flags[i].command != NULL; i++)
+    {
+        printf("- %s\n", commands_with_flags[i].command);
+        const Option *flags = commands_with_flags[i].flags;
+        for (int j = 0; flags[j].key != NULL; j++)
+        {
+            printf("\t%s -> %s\n", flags[j].key, flags[j].value);
+        }
     }
-
 }
-void small_header() {
+void small_header()
+{
     printf("CRASH\n");
+}
+bool is_in_command_flag(char *string, const CommandFlags *commands)
+{
+    const CommandFlags *command = find_command(string, commands);
+    return (command != NULL);
+}
+
+const CommandFlags *find_command(const char *command, const CommandFlags *commands)
+{
+    for (int i = 0; commands[i].command != NULL; i++)
+    {
+        if (strcmp(commands[i].command, command) == 0)
+        {
+            return &commands[i];
+        }
+    }
+    return NULL;
 }
 
 /**
  * To Do
- * 
- * - Transformar o commands_with_flags em um hash, podendo ter o comando e o hash das flags possíveis
+ *
  * - Verificar os argumentos
  * - Verificar os flags
  * - Executar um arquivo
