@@ -124,6 +124,7 @@ int main()
                 }
                 // Verifica os argumentos ou só executa
                 
+                execute(args, &status);
                 continue;
             }
             else
