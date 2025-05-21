@@ -27,6 +27,7 @@ typedef struct
 const Option ls_options[] = {
     {"-l", "Listar"},
     {"-a", "Mostrar todos"},
+    {"..", "mostra da pasta anterior"},
     {NULL, NULL}};
 
 const CommandFlags commands_with_flags[] = {
@@ -58,17 +59,20 @@ void help();
 
 void execute(char **args, int *status);
 void show_device_name();
+bool verificarArquivo(const char *caminho);
 
 int main()
 {
     char *line;
     char **args;
     int status;
+    int n = 0;
 
     header();
 
     do
     {
+        fflush(stdin);
 
         char cwd[PATH_MAX];
 
@@ -83,13 +87,14 @@ int main()
         line = lsh_read_line();
         args = lsh_split_line(line);
 
+        
         if (args[0] == NULL)
         {
             free(line);
             free(args);
             continue;
         }
-
+        
         bool is_command_without_args = is_in_array(args[0], commands_without_args);
         if (is_command_without_args)
         {
@@ -103,6 +108,8 @@ int main()
             if (strcmp(args[0], "help") == 0)
             {
                 help();
+                free(line);
+                free(args);
                 continue;
             }
 
@@ -117,14 +124,18 @@ int main()
                 {
                     printf("crash: Invalid arguments\n");
                     printf("usage: %s <args>\n", args[0]);
+                    free(line);
+                    free(args);
                     continue;
                 }else if(chdir(args[1]) != 0)
                 {
                     perror("crash");
                 }
                 // Verifica os argumentos ou só executa
-                
+
                 execute(args, &status);
+                free(line);
+                free(args);
                 continue;
             }
             else
@@ -144,6 +155,8 @@ int main()
                     if (!is_valid)
                     {
                         printf("crash: invalid flags\n");
+                        free(line);
+                        free(args);
                         continue;
                     }
 
@@ -161,14 +174,29 @@ int main()
 
                         execute(new_args, &status);
                         free(new_args);
+                        free(line);
+                        free(args);
                         continue;
                     }
 
                     execute(args, &status);
+                    free(line);
+                    free(args);
                     continue;
 
                 }else{
+
+                    if(verificarArquivo(*args) == false)
+                    {
+                        printf("arquivo nao existe\n");
+                        free(line);
+                        free(args);
+                        continue;
+                    }
+
                     execute(args, &status);
+                    free(line);
+                    free(args);
                     continue;
                 }
 
@@ -349,14 +377,20 @@ const CommandFlags *find_command(const char *command, const CommandFlags *comman
 void show_device_name(){
     struct utsname buffer;
     
-    // Obtém informações do sistema
     if (uname(&buffer) != 0) {
         perror("Erro ao obter informações do sistema");
         exit(EXIT_FAILURE);
     }
     
-    // Exibe o nome do nó (hostname)
     printf("\033[1m\033[32m%s\033[0m:", buffer.nodename);
+}
+
+bool verificarArquivo(const char *caminho) {
+    if (access(caminho, F_OK) == 0) {
+        return true; 
+    } else {
+        return false; 
+    }
 }
 /**
  * To Do
