@@ -118,9 +118,13 @@ int main()
                     printf("crash: Invalid arguments\n");
                     printf("usage: %s <args>\n", args[0]);
                     continue;
+                }else if(chdir(args[1]) != 0)
+                {
+                    perror("crash");
                 }
                 // Verifica os argumentos ou só executa
-                execute(args, &status);
+
+                continue;
             }
             else
             {
