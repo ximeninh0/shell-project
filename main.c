@@ -123,7 +123,7 @@ int main()
                     perror("crash");
                 }
                 // Verifica os argumentos ou só executa
-
+                
                 continue;
             }
             else
@@ -139,12 +139,34 @@ int main()
                         if (opt == NULL)
                             is_valid = false;
                     }
+
                     if (!is_valid)
                     {
                         printf("crash: invalid flags\n");
                         continue;
                     }
-                    
+
+                    if(strcmp(args[0], "ls") == 0)
+                    {
+                        int count = 0;
+                        while (args[count] != NULL) count++;
+
+                        char **new_args = malloc((count + 2) * sizeof(char *));
+                        for (int i = 0; i < count; i++) {
+                            new_args[i] = args[i];
+                        }
+                        new_args[count] = "--color=auto";
+                        new_args[count + 1] = NULL;
+
+                        execute(new_args, &status);
+                        free(new_args);
+                        continue;
+                    }
+
+                    execute(args, &status);
+                    continue;
+
+                }else{
                     execute(args, &status);
                     continue;
                 }
