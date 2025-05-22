@@ -114,6 +114,9 @@ int main()
             }
 
             execute(args, &status);
+            free(line);
+            free(args);
+            continue;
         }
         else
         {
@@ -127,12 +130,16 @@ int main()
                     free(line);
                     free(args);
                     continue;
-                }else if(chdir(args[1]) != 0)
-                {
-                    perror("crash");
+                } 
+                
+                if (strcmp(args[0], "cd") == 0) {
+                    if (chdir(args[1]) != 0) {
+                        perror("crash");
+                    }
+                    free(line);
+                    free(args);
+                    continue;
                 }
-                // Verifica os argumentos ou só executa
-
                 execute(args, &status);
                 free(line);
                 free(args);
@@ -148,7 +155,7 @@ int main()
                     for (int i = 1; args[i] != NULL && is_valid == true; i++)
                     {
                         const char *opt = find_option(args[i], flags);
-                        if (opt == NULL)
+                        if (opt == NULL && !verificarArquivo(args[i]))
                             is_valid = false;
                     }
 
@@ -159,24 +166,13 @@ int main()
                         free(args);
                         continue;
                     }
-
+                    //comando valido 
                     if(strcmp(args[0], "ls") == 0)
                     {
                         int count = 0;
                         while (args[count] != NULL) count++;
-
-                        char **new_args = malloc((count + 2) * sizeof(char *));
-                        for (int i = 0; i < count; i++) {
-                            new_args[i] = args[i];
-                        }
-                        new_args[count] = "--color=auto";
-                        new_args[count + 1] = NULL;
-
-                        execute(new_args, &status);
-                        free(new_args);
-                        free(line);
-                        free(args);
-                        continue;
+                        args[count] = "--color=auto";
+                        args[count + 1] = NULL;
                     }
 
                     execute(args, &status);
@@ -184,24 +180,7 @@ int main()
                     free(args);
                     continue;
 
-                }else{
-
-                    if(verificarArquivo(*args) == false)
-                    {
-                        printf("arquivo nao existe\n");
-                        free(line);
-                        free(args);
-                        continue;
-                    }
-
-                    execute(args, &status);
-                    free(line);
-                    free(args);
-                    continue;
                 }
-
-                // Executa um arquivo ou da erro
-                printf("crash: invalid command\n");
             }
         }
 
