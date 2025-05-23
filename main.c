@@ -288,6 +288,7 @@ void execute(char **args, int *status)
     pid_t pid = fork();
     if (pid == 0)
     {
+        printf("%s", args[0]);
         if (execvp(args[0], args) == -1)
         {
             perror("crash");

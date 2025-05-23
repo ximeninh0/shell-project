@@ -1,0 +1,300 @@
+#include <stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <linux/limits.h>
+
+#define MAX_LINE 1024
+#define MAX_PROCS 10    // número máximo de processos (separados por &)
+#define MAX_ARGS 20     // número máximo de argumentos por processo
+#define BUFFER_SIZE 256 // tamanho máximo da linha de entrada
+#define MAX_STAGES 10
+
+int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1]);
+int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1]);
+void print_args(char *row[]);
+int is_builtin(char *comand);
+void execute(char **args);
+void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
+pid_t launch_process(int in_fd, int out_fd, char **args);
+
+
+// TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
+// TODO comando cd atualmente nao funcion, utilizar a fun is_builtin para tratar e executa-lo
+// TODO verificar tbm se os comandos chamados podem ser executados juntos e se precisam de argumentos
+
+int main(int argc, char *argv[])
+{
+    char line[MAX_LINE];
+    char cwd[PATH_MAX]; // salva o current working dir
+    char *args[MAX_PROCS][MAX_ARGS + 1]; // slip inicial da linha separando em comandos "simultaneos"
+    char *pipe_args[MAX_STAGES][MAX_ARGS + 1]; // contem o que deve ser executado
+    int stage_count;
+    int procs = 0;
+
+    FILE *input = stdin; // para leitura constante do stdin
+
+    while (1)
+    {
+        fflush(stdin);
+        stage_count = 0; // # stage_count contem o numero de proc de devem ser executados via pipe onde: proc_1 > stout >> proc_2 >stdin
+
+        if (getcwd(cwd, sizeof(cwd)) == NULL) // serve apenas para pegar o diretorio atual 
+            break;
+
+        if (input == stdin) // printa o dir atual antes de pedir entrada
+            printf("%s $: ", cwd);
+
+        if (fgets(line, sizeof(line), input) == NULL)
+            break; // ! sai em caso de erro na leitura
+
+        if (line[0] == '\n' || line[0] == '\0')
+            continue;
+
+        procs = simultaneos_proc(line, args);
+
+        for (int p = 0; p < procs; p++)
+        {
+            stage_count = split_pipeline_args(args[p], pipe_args);
+
+            if (stage_count > 1)
+            {
+                execute_pipeline(pipe_args, stage_count);
+            }
+            else
+            {
+                execute(pipe_args[0]);
+                continue;
+            }
+        }
+    }
+}
+
+// separa e retorna o numero de processos simultaneos separados por &
+int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1])
+{
+    char *procs[MAX_PROCS];
+    int proc_count = 0;
+
+    // Remove o \n final
+    input[strcspn(input, "\n")] = '\0';
+
+    // Separar por '&'
+    char *saveptr_proc;
+    char *tok_proc = strtok_r(input, "&", &saveptr_proc);
+    while (tok_proc && proc_count < MAX_PROCS)
+    {
+        // Trim espaços iniciais
+        while (*tok_proc == ' ')
+            tok_proc++;
+        // Trim espaços finais
+        char *end = tok_proc + strlen(tok_proc) - 1;
+        while (end > tok_proc && *end == ' ')
+        {
+            *end = '\0';
+            end--;
+        }
+        procs[proc_count++] = tok_proc;
+        tok_proc = strtok_r(NULL, "&", &saveptr_proc);
+    }
+
+    // Para cada processo, separar em argumentos
+    for (int p = 0; p < proc_count; p++)
+    {
+        int argc = 0;
+        char *saveptr_arg;
+        char *tok_arg = strtok_r(procs[p], " \t", &saveptr_arg);
+        while (tok_arg && argc < MAX_ARGS)
+        {
+            out_args[p][argc++] = tok_arg;
+            tok_arg = strtok_r(NULL, " \t", &saveptr_arg);
+        }
+        out_args[p][argc] = NULL; // argv-style
+    }
+
+    return proc_count;
+}
+
+// ! funcao para debugar os args
+void print_args(char *row[])
+{
+    if (row == NULL)
+    {
+        printf("Erro: row é NULL\n");
+        return;
+    }
+
+    for (int i = 0; row[i] != NULL; i++)
+    {
+        printf("%s", row[i]);
+        if (row[i + 1] != NULL)
+            printf(" "); // espaço entre argumentos
+    }
+    printf("\n");
+}
+
+
+// separa e retorna o num de processos "dependentes" separados por |
+int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1])
+{
+    int stage = 0, argc = 0;
+
+    for (int i = 0; in_args[i] != NULL && stage < MAX_STAGES; i++)
+    {
+        if (strcmp(in_args[i], "|") == 0)
+        {
+            // fecha o estágio atual
+            out_args[stage][argc] = NULL;
+            stage++;
+            argc = 0;
+        }
+        else
+        {
+            // adiciona token ao estágio atual
+            if (argc < MAX_ARGS)
+            {
+                out_args[stage][argc++] = in_args[i];
+            }
+        }
+    }
+    // termina o último estágio
+    out_args[stage][argc] = NULL;
+    return stage + 1;
+}
+
+// TODO usar esta func para tratar os comandos pedidos
+/* int is_builtin(char *comand)
+{
+    return (!strcmp(comand, "exit") || !strcmp(comand, "cd") || !strcmp(comand, "pwd") || !strcmp(comand, "path") || !strcmp(comand, "cat") || !strcmp(comand, "ls"));
+} */
+
+// ! func que executa comando simples, no caso comandos seperados por &
+void execute(char **args)
+{
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        // Processo filho
+        if (execvp(args[0], args) == -1)
+        {
+            perror("Erro ao executar o comando");
+        }
+        exit(EXIT_FAILURE);
+    }
+    else if (pid < 0)
+    {
+        // Erro ao criar o processo filho
+        perror("Erro ao criar o processo filho");
+    }
+    else
+    {
+        // Processo pai espera pelo término do filho
+        waitpid(pid, NULL, 0);
+    }
+}
+
+// ! cria e lanca o processo com pipes para comunicacao com outro processo
+pid_t launch_process(int in_fd, int out_fd, char **args)
+{
+    pid_t pid = fork();
+
+    if (pid < 0)
+    {
+        perror("fork error");
+        return -1; // Retorna -1 para indicar erro no fork
+    }
+
+    if (pid == 0)
+    { // Processo Filho
+        if (in_fd != STDIN_FILENO) // redireciona para entrada padrao
+        {
+            if (dup2(in_fd, STDIN_FILENO) < 0)
+            {
+                perror("dup2 input error");
+                exit(EXIT_FAILURE);
+            }
+            close(in_fd); 
+        }
+
+        // Redireciona a saida padrão se não for STDOUT_FILENO, so sai para padrao se for o ultimo comando
+        if (out_fd != STDOUT_FILENO)
+        {
+            if (dup2(out_fd, STDOUT_FILENO) < 0)
+            {
+                perror("dup2 output error");
+                exit(EXIT_FAILURE);
+            }
+            close(out_fd); // Fecha o descritor original
+        }
+
+        // Executa o comando e sai caso tenha erro
+        if (execvp(args[0], args) == -1)
+        {
+            perror("Erro ao executar o comando");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return pid; // Processo Pai retorna o PID do filho
+}
+
+// ! executa os comandos juntos chamando launch_process juntamente com pipes
+void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
+{
+    int in_fd = STDIN_FILENO;
+    int fd[2];
+    pid_t pids[MAX_STAGES];
+
+    for (int i = 0; i < stage_count; i++)
+    {
+        int out_fd;
+
+        // Se nao for o último comando, cria um pipe para a saida
+        if (i < stage_count - 1)
+        {
+            if (pipe(fd) == -1)
+            {
+                perror("pipe error");
+                exit(EXIT_FAILURE);
+            }
+            out_fd = fd[1]; // A saida sera a escrita do pipe
+        }
+        else // ultimo caso, escreve na saida padrao
+        {
+            out_fd = STDOUT_FILENO;
+        }
+
+        // Lança o processo para o "comando atual"
+        pids[i] = launch_process(in_fd, out_fd, stages[i]);
+
+        // Fecha os "pipes de escrita" no processo pai
+        if (in_fd != STDIN_FILENO)
+        {
+            close(in_fd);
+        }
+        if (out_fd != STDOUT_FILENO)
+        {
+            close(out_fd);
+        }
+
+        // A entrada para o proximo comando sera a leitura do pipe atual
+        if (i < stage_count - 1)
+        {
+            in_fd = fd[0];
+        }
+    }
+
+    for (int i = 0; i < stage_count; i++)
+    {
+        if (pids[i] > 0)
+        {
+            waitpid(pids[i], NULL, 0);
+        }
+    }
+}
