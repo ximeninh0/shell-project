@@ -26,6 +26,8 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
 pid_t launch_process(int in_fd, int out_fd, char **args);
 int count_args(char **args);
 bool validate_command(char **args);
+int handle_output_file(char ** args, char **output_file);
+
 
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
@@ -190,33 +192,36 @@ int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1
     return stage + 1;
 }
 
-// TODO usar esta func para tratar os comandos pedidos
-/* int is_builtin(char *comand)
-{
-    return (!strcmp(comand, "exit") || !strcmp(comand, "cd") || !strcmp(comand, "pwd") || !strcmp(comand, "path") || !strcmp(comand, "cat") || !strcmp(comand, "ls"));
-} */
-
 // ! func que executa comando simples, no caso comandos seperados por &
 void execute(char **args)
 {
-    pid_t pid = fork();
-    if (pid == 0)
+    char *output_file = NULL;
+    int out_fd = STDOUT_FILENO;
+    int status;
+
+    status = handle_output_file(args, &output_file);
+
+    if (status == -1) return; // erro de sintaxe
+
+    if (output_file != NULL)
     {
-        // Processo filho
-        if (execvp(args[0], args) == -1)
+        out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (out_fd < 0)
         {
-            perror("Erro ao executar o comando");
+            perror("erro ao abrir o aquivo\n");
+            return;
         }
-        exit(EXIT_FAILURE);
     }
-    else if (pid < 0)
+
+    pid_t pid = launch_process(STDIN_FILENO, out_fd, args);
+
+    if (out_fd != STDOUT_FILENO)
     {
-        // Erro ao criar o processo filho
-        perror("Erro ao criar o processo filho");
+        close(out_fd);
     }
-    else
+    
+    if (pid > 0 )
     {
-        // Processo pai espera pelo término do filho
         waitpid(pid, NULL, 0);
     }
 }
@@ -272,6 +277,9 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
     int in_fd = STDIN_FILENO;
     int fd[2];
     pid_t pids[MAX_STAGES];
+    char *output_file = NULL;
+    int status;
+    int last_out_fd = STDOUT_FILENO;
 
     for (int i = 0; i < stage_count; i++)
     {
@@ -289,36 +297,43 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         }
         else // ultimo caso, escreve na saida padrao
         {
-            out_fd = STDOUT_FILENO;
+            status = handle_output_file(stages[i], &output_file); 
+            if (status == -1)
+            {
+                fprintf(stderr, "erro de sintaxa abortando\n");
+                return;
+            }
+            
+            if (output_file != NULL)
+            {
+                out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                if (out_fd < 0)
+                {
+                    perror("error ao abrir pipe de saida");
+                    close(out_fd);
+                    return;
+                }
+            }else 
+            {
+                out_fd = STDOUT_FILENO;
+            }
         }
 
         // Lança o processo para o "comando atual"
         pids[i] = launch_process(in_fd, out_fd, stages[i]);
 
         // Fecha os "pipes de escrita" no processo pai
-        if (in_fd != STDIN_FILENO)
-        {
-            close(in_fd);
-        }
-        if (out_fd != STDOUT_FILENO)
-        {
-            close(out_fd);
-        }
+        if (in_fd != STDIN_FILENO) close(in_fd);
+        
+        if (out_fd != STDOUT_FILENO) close(out_fd);
 
         // A entrada para o proximo comando sera a leitura do pipe atual
-        if (i < stage_count - 1)
-        {
-            in_fd = fd[0];
-        }
+        if (i < stage_count - 1) in_fd = fd[0];
     }
 
     for (int i = 0; i < stage_count; i++)
-    {
-        if (pids[i] > 0)
-        {
-            waitpid(pids[i], NULL, 0);
-        }
-    }
+        if (pids[i] > 0) waitpid(pids[i], NULL, 0);
 }
 
 // ! conta a quantidade de argumentos em cada comando
@@ -372,4 +387,30 @@ bool validate_command(char **args)
     {
         return true;
     }
+}
+
+// ! aponta output_file para o arquivo apos > colocando em pipes
+int handle_output_file(char ** args, char **output_file)
+{
+    *output_file = NULL;
+
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        if(strcmp(args[i], ">") == 0)
+        {
+            if (args[i+1] == NULL)
+            {
+                fprintf(stderr, "erro: falta nome do arquivo apos > \n");
+                return -1; // Indica a falha
+            }
+
+            *output_file = args[i+1];
+
+            args[i] = NULL;
+
+            return 1;
+        }
+    }
+    
+    return 0; // Nao ha > nos argumentos
 }
