@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <stdbool.h>
 
 #define MAX_LINE 1024
 #define MAX_PROCS 10    // número máximo de processos (separados por &)
@@ -23,6 +24,8 @@ int is_builtin(char *comand);
 void execute(char **args);
 void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
 pid_t launch_process(int in_fd, int out_fd, char **args);
+int count_args(char **args);
+bool validate_command(char **args);
 
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
@@ -63,14 +66,34 @@ int main(int argc, char *argv[])
         {
             stage_count = split_pipeline_args(args[p], pipe_args);
 
-            if (stage_count > 1)
+            bool pipe_is_valid = true;
+
+            for (int s = 0; s < stage_count; s++)
             {
-                execute_pipeline(pipe_args, stage_count);
+                if (pipe_args[s][0] == NULL)
+                {
+                    fprintf(stderr, "Erro: pipeline vazia\n");
+                    continue;;
+                }
+                
+                if (!validate_command(pipe_args[s]))
+                {
+                    pipe_is_valid = false;
+                    continue;
+                }
             }
-            else
-            {
-                execute(pipe_args[0]);
-                continue;
+
+            if (pipe_is_valid)
+            {    
+                if (stage_count > 1)
+                {
+                    execute_pipeline(pipe_args, stage_count);
+                }
+                else
+                {
+                    execute(pipe_args[0]);
+                    continue;
+                }
             }
         }
     }
@@ -138,7 +161,6 @@ void print_args(char *row[])
     }
     printf("\n");
 }
-
 
 // separa e retorna o num de processos "dependentes" separados por |
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1])
@@ -296,5 +318,58 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         {
             waitpid(pids[i], NULL, 0);
         }
+    }
+}
+
+// ! conta a quantidade de argumentos em cada comando
+int count_args(char **args)
+{
+    int count = 0;
+    if(args == NULL) return 0;
+
+    while (args[count] != NULL)
+    {
+        count++;
+    }
+    return count;
+}
+
+// ! verifica se o comando e valido e se seus argumentos sao validos 
+bool validate_command(char **args)
+{
+
+    char *command = args[0];
+    int num_args = count_args(args) - 1;
+
+    if (strcmp(command, "cd") == 0)
+    {
+        if (num_args != 1)
+        {
+            fprintf(stderr, "uso: cd <dretorio>\n");
+            return false;
+        }
+        return 1;
+    }else if (strcmp(command, "ls") == 0)
+    {
+        return true;
+    }else if (strcmp(command, "pwd") == 0)
+    {
+        if (num_args != 0)
+        {
+            fprintf(stderr, "uso: pwd\n");
+            return false;
+        }
+        return true;
+    }else if (strcmp(command, "cat") == 0)
+    {
+        if (num_args < 1)
+        {
+            fprintf(stderr, "uso: cat <arquivo> [arquivo2 ...]\n");
+            return false;
+        }
+        return true;
+    }else
+    {
+        return true;
     }
 }
