@@ -1,0 +1,5 @@
+-rw-rw-r-- 1 luigi luigi  5896 mai 22 21:17 base_estudo.c
+-rw-rw-r-- 1 luigi luigi  9424 mai 23 14:55 main.c
+-rw-rw-r-- 1 luigi luigi 12065 mai 26 13:11 shell.c
+-rw-rw-r-- 1 luigi luigi    85 mai 22 15:31 teste.c
+drwxrwxr-x 2 luigi luigi  4096 mai 22 10:11 .vscode

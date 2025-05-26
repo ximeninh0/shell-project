@@ -20,26 +20,23 @@
 int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1]);
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1]);
 void print_args(char *row[]);
-int is_builtin(char *comand);
+bool is_builtin(char *comand);
 void execute(char **args);
 void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
 pid_t launch_process(int in_fd, int out_fd, char **args);
 int count_args(char **args);
 bool validate_command(char **args);
-int handle_output_file(char ** args, char **output_file);
-
-
+int handle_output_file(char **args, char **output_file);
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
-// TODO comando cd atualmente nao funcion, utilizar a fun is_builtin para tratar e executa-lo
-// TODO verificar tbm se os comandos chamados podem ser executados juntos e se precisam de argumentos
+// TODO comando cd atualmente nao funciona, utilizar a fun is_builtin para tratar e executa-lo
 
 int main(int argc, char *argv[])
 {
     char line[MAX_LINE];
-    char cwd[PATH_MAX]; // salva o current working dir
-    char *args[MAX_PROCS][MAX_ARGS + 1]; // slip inicial da linha separando em comandos "simultaneos"
-    char *pipe_args[MAX_STAGES][MAX_ARGS + 1]; // contem o que deve ser executado
+    char cwd[PATH_MAX];                            // salva o current working dir
+    char *args[MAX_PROCS][MAX_ARGS + 1];           // slip inicial da linha separando em comandos "simultaneos"
+    char *pipeline_args[MAX_STAGES][MAX_ARGS + 1]; // contem o que deve executado como processo ou sub processos
     int stage_count;
     int procs = 0;
 
@@ -50,7 +47,7 @@ int main(int argc, char *argv[])
         fflush(stdin);
         stage_count = 0; // # stage_count contem o numero de proc de devem ser executados via pipe onde: proc_1 > stout >> proc_2 >stdin
 
-        if (getcwd(cwd, sizeof(cwd)) == NULL) // serve apenas para pegar o diretorio atual 
+        if (getcwd(cwd, sizeof(cwd)) == NULL) // serve apenas para pegar o diretorio atual
             break;
 
         if (input == stdin) // printa o dir atual antes de pedir entrada
@@ -66,36 +63,34 @@ int main(int argc, char *argv[])
 
         for (int p = 0; p < procs; p++)
         {
-            stage_count = split_pipeline_args(args[p], pipe_args);
+            stage_count = split_pipeline_args(args[p], pipeline_args);
 
             bool pipe_is_valid = true;
 
             for (int s = 0; s < stage_count; s++)
             {
-                if (pipe_args[s][0] == NULL)
+                if (pipeline_args[s][0] == NULL)
                 {
                     fprintf(stderr, "Erro: pipeline vazia\n");
-                    continue;;
+                    continue;
+                    ;
                 }
-                
-                if (!validate_command(pipe_args[s]))
+
+                if (!validate_command(pipeline_args[s]))
                 {
                     pipe_is_valid = false;
                     continue;
                 }
             }
 
-            if (pipe_is_valid)
-            {    
-                if (stage_count > 1)
-                {
-                    execute_pipeline(pipe_args, stage_count);
-                }
-                else
-                {
-                    execute(pipe_args[0]);
-                    continue;
-                }
+            if (stage_count > 1 && pipe_is_valid)
+            {
+                execute_pipeline(pipeline_args, stage_count);
+            }
+            else
+            {
+                execute(pipeline_args[0]);
+                continue;
             }
         }
     }
@@ -173,21 +168,21 @@ int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1
     {
         if (strcmp(in_args[i], "|") == 0)
         {
-            // fecha o estágio atual
+            // fecha o estagio atual
             out_args[stage][argc] = NULL;
             stage++;
             argc = 0;
         }
         else
         {
-            // adiciona token ao estágio atual
+            // adiciona token ao estagio atual
             if (argc < MAX_ARGS)
             {
                 out_args[stage][argc++] = in_args[i];
             }
         }
     }
-    // termina o último estágio
+    // termina o ultimo estagio
     out_args[stage][argc] = NULL;
     return stage + 1;
 }
@@ -201,7 +196,8 @@ void execute(char **args)
 
     status = handle_output_file(args, &output_file);
 
-    if (status == -1) return; // erro de sintaxe
+    if (status == -1)
+        return; // erro de sintaxe
 
     if (output_file != NULL)
     {
@@ -219,8 +215,8 @@ void execute(char **args)
     {
         close(out_fd);
     }
-    
-    if (pid > 0 )
+
+    if (pid > 0)
     {
         waitpid(pid, NULL, 0);
     }
@@ -238,7 +234,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args)
     }
 
     if (pid == 0)
-    { // Processo Filho
+    {                              // Processo Filho
         if (in_fd != STDIN_FILENO) // redireciona para entrada padrao
         {
             if (dup2(in_fd, STDIN_FILENO) < 0)
@@ -246,10 +242,10 @@ pid_t launch_process(int in_fd, int out_fd, char **args)
                 perror("dup2 input error");
                 exit(EXIT_FAILURE);
             }
-            close(in_fd); 
+            close(in_fd);
         }
 
-        // Redireciona a saida padrão se não for STDOUT_FILENO, so sai para padrao se for o ultimo comando
+        // Redireciona a saida padrão se nao for STDOUT_FILENO, so sai para padrao se for o ultimo comando
         if (out_fd != STDOUT_FILENO)
         {
             if (dup2(out_fd, STDOUT_FILENO) < 0)
@@ -285,25 +281,16 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
     {
         int out_fd;
 
-        // Se nao for o último comando, cria um pipe para a saida
+        // Se nao for o ultimo comando, cria um pipe para a saida
         if (i < stage_count - 1)
         {
-            if (pipe(fd) == -1)
-            {
-                perror("pipe error");
-                exit(EXIT_FAILURE);
-            }
-            out_fd = fd[1]; // A saida sera a escrita do pipe
-        }
-        else // ultimo caso, escreve na saida padrao
-        {
-            status = handle_output_file(stages[i], &output_file); 
+            status = handle_output_file(stages[i], &output_file);
             if (status == -1)
             {
                 fprintf(stderr, "erro de sintaxa abortando\n");
                 return;
             }
-            
+
             if (output_file != NULL)
             {
                 out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -314,7 +301,39 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
                     close(out_fd);
                     return;
                 }
-            }else 
+            }
+
+            else
+            {
+                if (pipe(fd) == -1)
+                {
+                    perror("pipe error");
+                    exit(EXIT_FAILURE);
+                }
+                out_fd = fd[1]; // A saida sera a escrita do pipe
+            }
+        }
+        else // ultimo caso, escreve na saida padrao
+        {
+            status = handle_output_file(stages[i], &output_file);
+            if (status == -1)
+            {
+                fprintf(stderr, "erro de sintaxa abortando\n");
+                return;
+            }
+
+            if (output_file != NULL)
+            {
+                out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                if (out_fd < 0)
+                {
+                    perror("error ao abrir pipe de saida");
+                    close(out_fd);
+                    return;
+                }
+            }
+            else
             {
                 out_fd = STDOUT_FILENO;
             }
@@ -324,23 +343,28 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         pids[i] = launch_process(in_fd, out_fd, stages[i]);
 
         // Fecha os "pipes de escrita" no processo pai
-        if (in_fd != STDIN_FILENO) close(in_fd);
-        
-        if (out_fd != STDOUT_FILENO) close(out_fd);
+        if (in_fd != STDIN_FILENO)
+            close(in_fd);
+
+        if (out_fd != STDOUT_FILENO)
+            close(out_fd);
 
         // A entrada para o proximo comando sera a leitura do pipe atual
-        if (i < stage_count - 1) in_fd = fd[0];
+        if (i < stage_count - 1)
+            in_fd = fd[0];
     }
 
     for (int i = 0; i < stage_count; i++)
-        if (pids[i] > 0) waitpid(pids[i], NULL, 0);
+        if (pids[i] > 0)
+            waitpid(pids[i], NULL, 0);
 }
 
 // ! conta a quantidade de argumentos em cada comando
 int count_args(char **args)
 {
     int count = 0;
-    if(args == NULL) return 0;
+    if (args == NULL)
+        return 0;
 
     while (args[count] != NULL)
     {
@@ -349,7 +373,7 @@ int count_args(char **args)
     return count;
 }
 
-// ! verifica se o comando e valido e se seus argumentos sao validos 
+// ! verifica se o comando e valido e se seus argumentos sao validos
 bool validate_command(char **args)
 {
 
@@ -364,10 +388,12 @@ bool validate_command(char **args)
             return false;
         }
         return 1;
-    }else if (strcmp(command, "ls") == 0)
+    }
+    else if (strcmp(command, "ls") == 0)
     {
         return true;
-    }else if (strcmp(command, "pwd") == 0)
+    }
+    else if (strcmp(command, "pwd") == 0)
     {
         if (num_args != 0)
         {
@@ -375,7 +401,8 @@ bool validate_command(char **args)
             return false;
         }
         return true;
-    }else if (strcmp(command, "cat") == 0)
+    }
+    else if (strcmp(command, "cat") == 0)
     {
         if (num_args < 1)
         {
@@ -383,34 +410,47 @@ bool validate_command(char **args)
             return false;
         }
         return true;
-    }else
+    }
+    else
     {
         return true;
     }
 }
 
 // ! aponta output_file para o arquivo apos > colocando em pipes
-int handle_output_file(char ** args, char **output_file)
+int handle_output_file(char **args, char **output_file)
 {
     *output_file = NULL;
 
     for (int i = 0; args[i] != NULL; i++)
     {
-        if(strcmp(args[i], ">") == 0)
+        if (strcmp(args[i], ">") == 0)
         {
-            if (args[i+1] == NULL)
+            if (args[i + 1] == NULL)
             {
                 fprintf(stderr, "erro: falta nome do arquivo apos > \n");
                 return -1; // Indica a falha
             }
 
-            *output_file = args[i+1];
+            *output_file = args[i + 1];
 
             args[i] = NULL;
 
             return 1;
         }
     }
-    
+
     return 0; // Nao ha > nos argumentos
+}
+
+// verifica se eh um comando interno
+bool is_builtin(char *command)
+{
+    return (
+        !strcmp(command, "exit") ||
+        !strcmp(command, "cd") ||
+        !strcmp(command, "pwd") ||
+        !strcmp(command, "path") ||
+        !strcmp(command, "cat") ||
+        !strcmp(command, "ls"));
 }
