@@ -27,6 +27,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args);
 int count_args(char **args);
 bool validate_command(char **args);
 int handle_output_file(char **args, char **output_file);
+void remove_output_file(char **args);
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
 // TODO comando cd atualmente nao funciona, utilizar a fun is_builtin para tratar e executa-lo
@@ -107,7 +108,7 @@ int main(int argc, char *argv[])
             }
             else if (pipe_is_valid)
             {
-                if(strcmp(pipeline_args[0][0], "exit") == 0)
+                if (strcmp(pipeline_args[0][0], "exit") == 0)
                 {
                     fprintf(stderr, "Saindo do shell...\n");
                     exit(0);
@@ -321,34 +322,14 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         // Se nao for o ultimo comando, cria um pipe para a saida
         if (i < stage_count - 1)
         {
-            status = handle_output_file(stages[i], &output_file);
-            if (status == -1)
-            {
-                fprintf(stderr, "erro de sintaxa abortando\n");
-                return;
-            }
+            remove_output_file(stages[i]); // remove o comando de redirecionamento para arquivo
 
-            if (output_file != NULL)
+            if (pipe(fd) == -1)
             {
-                out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-                if (out_fd < 0)
-                {
-                    perror("error ao abrir pipe de saida");
-                    close(out_fd);
-                    return;
-                }
+                perror("pipe error");
+                exit(EXIT_FAILURE);
             }
-
-            else
-            {
-                if (pipe(fd) == -1)
-                {
-                    perror("pipe error");
-                    exit(EXIT_FAILURE);
-                }
-                out_fd = fd[1]; // A saida sera a escrita do pipe
-            }
+            out_fd = fd[1]; // A saida sera a escrita do pipe
         }
         else // ultimo caso, escreve na saida padrao ou em um arquivo
         {
@@ -478,6 +459,20 @@ int handle_output_file(char **args, char **output_file)
     }
 
     return 0; // Nao ha > nos argumentos
+}
+
+void remove_output_file(char **args)
+{
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        if (strcmp(args[i], ">") == 0)
+        {
+            fprintf(stderr, "avido: redirecionamento para arquivo nao eh suportado em pipeline complexa\n");
+            args[i] = NULL;     // Remove o comando de redirecionamento
+            args[i + 1] = NULL; // Remove o arquivo de saida
+            break;
+        }
+    }
 }
 
 // verifica se eh um comando interno
