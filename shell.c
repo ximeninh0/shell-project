@@ -313,7 +313,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
                 out_fd = fd[1]; // A saida sera a escrita do pipe
             }
         }
-        else // ultimo caso, escreve na saida padrao
+        else // ultimo caso, escreve na saida padrao ou em um arquivo
         {
             status = handle_output_file(stages[i], &output_file);
             if (status == -1)
