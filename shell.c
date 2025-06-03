@@ -67,33 +67,59 @@ int main(int argc, char *argv[])
 
             bool pipe_is_valid = true;
 
-            for (int s = 0; s < stage_count; s++)
+            if (stage_count > 2)
             {
-                if (pipeline_args[s][0] == NULL)
+                fprintf(stderr, "Erro: pipeline com mais de 2 comandos nao suportada\n");
+                pipe_is_valid = false;
+                continue;
+            }
+            else
+            {
+                for (int s = 0; s < stage_count; s++)
                 {
-                    fprintf(stderr, "Erro: pipeline vazia\n");
-                    continue;
-                    ;
-                }
+                    if (pipeline_args[s][0] == NULL)
+                    {
+                        fprintf(stderr, "Erro: pipeline vazia\n");
+                        continue;
+                    }
 
-                if (!validate_command(pipeline_args[s]))
-                {
-                    pipe_is_valid = false;
-                    continue;
+                    if (!validate_command(pipeline_args[s]))
+                    {
+                        pipe_is_valid = false;
+                        continue;
+                    }
                 }
             }
 
             if (stage_count > 1 && pipe_is_valid)
             {
-                execute_pipeline(pipeline_args, stage_count);
+                for (int i = 0; i < stage_count; i++)
+                {
+                    if (strcmp(pipeline_args[i][0], "exit") == 0)
+                    {
+                        fprintf(stderr, "Erro: exit nao pode ser excutado em um pipeline complexa\n");
+                        pipe_is_valid = false;
+                        break;
+                    }
+                }
+                if (pipe_is_valid)
+                    execute_pipeline(pipeline_args, stage_count);
             }
-            else
+            else if (pipe_is_valid)
             {
+                if(strcmp(pipeline_args[0][0], "exit") == 0)
+                {
+                    fprintf(stderr, "Saindo do shell...\n");
+                    exit(0);
+                }
                 execute(pipeline_args[0]);
                 continue;
             }
         }
     }
+    printf("Saindo do shell...\n");
+    fclose(input); // Fecha o arquivo de entrada se não for stdin
+    return 0;
 }
 
 // separa e retorna o numero de processos simultaneos separados por &
@@ -256,11 +282,22 @@ pid_t launch_process(int in_fd, int out_fd, char **args)
             close(out_fd); // Fecha o descritor original
         }
 
-        // Executa o comando e sai caso tenha erro
-        if (execvp(args[0], args) == -1)
+        if (strcmp(args[0], "cd") == 0) // comando interno cd
         {
-            perror("Erro ao executar o comando");
-            exit(EXIT_FAILURE);
+            if (chdir(args[1]) != 0)
+            {
+                perror("cd error");
+                exit(EXIT_FAILURE);
+            }
+            return pid; // Processo Pai retorna o PID do filho
+        }
+        else
+        {
+            if (execvp(args[0], args) == -1)
+            {
+                perror("Erro ao executar o comando");
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
