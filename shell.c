@@ -95,9 +95,9 @@ int main(int argc, char *argv[])
             {
                 for (int i = 0; i < stage_count; i++)
                 {
-                    if (strcmp(pipeline_args[i][0], "exit") == 0)
+                    if (strcmp(pipeline_args[i][0], "exit") == 0 || strcmp(pipeline_args[i][0], "cd") == 0)
                     {
-                        fprintf(stderr, "Erro: exit nao pode ser excutado em um pipeline complexa\n");
+                        fprintf(stderr, "Erro: %s nao pode ser excutado em um pipeline complexa\n", pipeline_args[i][0]);
                         pipe_is_valid = false;
                         break;
                     }
