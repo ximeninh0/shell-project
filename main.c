@@ -283,7 +283,7 @@ const char *find_option(const char *key, const Option *options)
     return NULL;
 }
 
-void execute(char **args, int *status)
+void execute(char **args, int *status, Lista* path_list)
 {
     pid_t pid = fork();
     if (pid == 0)

@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <linux/limits.h>
 #include <stdbool.h>
@@ -27,14 +28,15 @@ int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1]);
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1]);
 void print_args(char *row[]);
 bool is_builtin(char *comand);
-void execute(char **args);
+void execute(char **args, Lista *paths_list);
 void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
-pid_t launch_process(int in_fd, int out_fd, char **args);
+pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list);
 int count_args(char **args);
 bool validate_command(char **args);
 int handle_output_file(char **args, char **output_file);
 void remove_output_file(char **args);
 void fillPathsList(char **args,Lista **paths);
+int find_and_exec_command(char **args, Lista *paths_list);
 
 Lista* liberaListaAndReset(Lista* head);
 Lista* init();
@@ -134,7 +136,7 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "Saindo do shell...\n");
                     exit(0);
                 }
-                execute(pipeline_args[0]);
+                execute(pipeline_args[0],paths);
                 continue;
             }
         }
@@ -236,7 +238,7 @@ int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1
 }
 
 // ! func que executa comando simples, no caso comandos seperados por &
-void execute(char **args)
+void execute(char **args, Lista *paths_list)
 {
     char *output_file = NULL;
     int out_fd = STDOUT_FILENO;
@@ -257,7 +259,7 @@ void execute(char **args)
         }
     }
 
-    pid_t pid = launch_process(STDIN_FILENO, out_fd, args);
+    pid_t pid = launch_process(STDIN_FILENO, out_fd, args, paths_list);
 
     if (out_fd != STDOUT_FILENO)
     {
@@ -271,7 +273,7 @@ void execute(char **args)
 }
 
 // ! cria e lanca o processo com pipes para comunicacao com outro processo
-pid_t launch_process(int in_fd, int out_fd, char **args)
+pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
 {
     pid_t pid = fork();
 
@@ -315,7 +317,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args)
         }
         else
         {
-            if (execvp(args[0], args) == -1)
+            if (find_and_exec_command(args, paths_list) == -1)
             {
                 perror("Erro ao executar o comando");
                 exit(EXIT_FAILURE);
@@ -379,7 +381,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         }
 
         // Lança o processo para o "comando atual"
-        pids[i] = launch_process(in_fd, out_fd, stages[i]);
+        pids[i] = launch_process(in_fd, out_fd, stages[i],NULL);
 
         // Fecha os "pipes de escrita" no processo pai
         if (in_fd != STDIN_FILENO)
@@ -516,6 +518,46 @@ void fillPathsList(char **args,Lista **paths){
         *paths = insert(*paths,args[i]);
     }
     printf("passou");
+}
+
+int find_and_exec_command(char **args, Lista *paths_list) {
+    // Caso 1: Comando já é um caminho absoluto ou relativo (e.g., "/bin/ls" ou "./my_script")
+    // Se o primeiro argumento contém '/', tenta executá-lo diretamente.
+    if (strchr(args[0], '/') != NULL) {
+        if (execv(args[0], args) == -1) {
+            // Se falhar, imprime o erro específico (ex: "No such file or directory")
+            perror(args[0]);
+            return -1; // Indica que não foi possível executar
+        }
+        // execv só retorna se houver erro, caso contrário, o processo é substituído.
+    }
+
+    // Caso 2: Comando precisa ser buscado nos diretórios do PATH
+    // (O comando não contém '/', e.g., "ls", "cat", "sum")
+    char full_path[PATH_MAX]; // Buffer para construir o caminho completo
+    
+    Lista* current_path_node = paths_list; // Ponteiro para percorrer sua lista de PATHs
+    while (current_path_node != NULL) {
+        // Constrói o caminho completo: "diretorio_do_path" + "/" + "comando"
+        // snprintf é mais seguro que sprintf pois evita buffer overflow
+        snprintf(full_path, PATH_MAX, "%s/%s", current_path_node->valor, args[0]);
+
+        // Verifica se o arquivo existe e tem permissão de execução
+        if (access(full_path, X_OK) == 0) {
+            // Encontrou o executável! Tenta executá-lo.
+            if (execv(full_path, args) == -1) {
+                // Se execv falhar (por exemplo, arquivo corrompido, permissão negada APÓS access)
+                perror(full_path); // Imprime o erro específico
+                return -1; // Indica falha na execução
+            }
+            // execv só retorna em caso de erro. Se chegou aqui, o processo foi substituído.
+        }
+        current_path_node = current_path_node->prox; // Vai para o próximo diretório na lista
+    }
+
+    // Se o loop terminou e o comando não foi encontrado em nenhum PATH
+    fprintf(stderr, "%s: comando não encontrado\n", args[0]);
+    return -1; // Indica que o comando não foi encontrado/executado
 }
 
 //iniciar lista
