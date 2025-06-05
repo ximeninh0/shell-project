@@ -137,6 +137,16 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "Saindo do shell...\n");
                     exit(0);
                 }
+                else if (strcmp(pipeline_args[0][0], "cd") == 0)
+                {
+                    if (chdir(pipeline_args[0][1]) != 0)
+                    {
+                        perror("Erro ao mudar de diretório");
+                    }
+                    // find_and_exec_command(pipeline_args[0], paths);
+                    continue;
+                }
+
                 execute(pipeline_args[0], paths);
                 continue;
             }
@@ -306,23 +316,11 @@ pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
             }
             close(out_fd); // Fecha o descritor original
         }
-
-        if (strcmp(args[0], "cd") == 0) // comando interno cd
+        
+        if (find_and_exec_command(args, paths_list) == -1)
         {
-            if (chdir(args[1]) != 0)
-            {
-                perror("cd error");
-                exit(EXIT_FAILURE);
-            }
-            return pid; // Processo Pai retorna o PID do filho
-        }
-        else
-        {
-            if (find_and_exec_command(args, paths_list) == -1)
-            {
-                perror("Erro ao executar o comando");
-                exit(EXIT_FAILURE);
-            }
+            perror("Erro ao executar o comando");
+            exit(EXIT_FAILURE);
         }
     }
 
