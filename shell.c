@@ -27,8 +27,17 @@ pid_t launch_process(int in_fd, int out_fd, char **args);
 int count_args(char **args);
 bool validate_command(char **args);
 int handle_output_file(char ** args, char **output_file);
+void fillPathsList(char **args,Lista*paths);
 
+typedef struct element{
+    char valor[MAX_STAGES];
+    struct element *prox;
+}Lista;
 
+Lista* init();
+Lista* insert(Lista* receba,char valor[MAX_ARGS]);
+Lista* removeFrom(Lista* deleted);
+void printAll(Lista *p);
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
 // TODO comando cd atualmente nao funcion, utilizar a fun is_builtin para tratar e executa-lo
@@ -36,6 +45,8 @@ int handle_output_file(char ** args, char **output_file);
 
 int main(int argc, char *argv[])
 {
+    Lista* paths;
+    paths = init();
     char line[MAX_LINE];
     char cwd[PATH_MAX]; // salva o current working dir
     char *args[MAX_PROCS][MAX_ARGS + 1]; // slip inicial da linha separando em comandos "simultaneos"
@@ -47,6 +58,7 @@ int main(int argc, char *argv[])
 
     while (1)
     {
+        printAll(paths);
         fflush(stdin);
         stage_count = 0; // # stage_count contem o numero de proc de devem ser executados via pipe onde: proc_1 > stout >> proc_2 >stdin
 
@@ -70,6 +82,10 @@ int main(int argc, char *argv[])
 
             bool pipe_is_valid = true;
 
+            if(strcmp(pipe_args[0][0], "path") == 0){
+                fillPathsList(args,paths);
+                continue;
+            }
             for (int s = 0; s < stage_count; s++)
             {
                 if (pipe_args[s][0] == NULL)
@@ -413,4 +429,66 @@ int handle_output_file(char ** args, char **output_file)
     }
     
     return 0; // Nao ha > nos argumentos
+}
+
+//Lida com o comando path
+void fillPathsList(char* args[MAX_STAGES][MAX_ARGS],Lista*paths){
+    liberaLista(paths);
+    for(int i = 1; i < count_args(args);i++){
+        printf("%s ",args[0][i]);
+        insert(paths,args[0][i]);
+    }
+    printf("passou");
+}
+
+//iniciar lista
+Lista* init(){
+    return NULL;
+}
+
+//inserir novo elemento na lista
+Lista* insert(Lista* receba, char valor[]){
+    Lista* novo;
+    novo = (Lista*)malloc(sizeof(Lista));
+    strcpy(novo->valor,valor);
+    novo->prox = receba;
+    return novo;
+}
+
+//remover elemento da lista
+Lista* removeFrom(Lista* init){
+    Lista* novo;
+    init = init->prox;
+    return init;
+}
+
+//liberar lista toda
+void liberaLista(Lista* list){
+    Lista* aux = list;
+    Lista* prox;
+    while(aux != NULL){
+        free(aux->prox);
+        free(aux);
+    }
+}
+//verifica se a lista esta vazia
+int isEmpty(Lista* list){
+    if(list == NULL)
+        return 1;
+    return 0;
+}
+
+//debugar lista de paths
+void printAll(Lista *p){
+    int cont=0;
+    if(isEmpty(p)){
+        printf("\nA lista esta vazia!\n");
+        return;
+    }
+    
+    while(p != NULL){
+        printf("\nElemento%d: %s ",cont+1,p->valor);
+        p = p->prox;
+        cont++;
+    }
 }
