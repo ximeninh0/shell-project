@@ -12,17 +12,17 @@
 #include <linux/limits.h>
 #include <stdbool.h>
 
-
 #define MAX_LINE 1024
 #define MAX_PROCS 10    // número máximo de processos (separados por &)
 #define MAX_ARGS 20     // número máximo de argumentos por processo
 #define BUFFER_SIZE 256 // tamanho máximo da linha de entrada
 #define MAX_STAGES 10
 
-typedef struct element{
+typedef struct element
+{
     char *valor;
     struct element *prox;
-}Lista;
+} Lista;
 
 int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1]);
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1]);
@@ -35,13 +35,13 @@ int count_args(char **args);
 bool validate_command(char **args);
 int handle_output_file(char **args, char **output_file);
 void remove_output_file(char **args);
-void fillPathsList(char **args,Lista **paths);
+void fillPathsList(char **args, Lista **paths);
 int find_and_exec_command(char **args, Lista *paths_list);
 
-Lista* liberaListaAndReset(Lista* head);
-Lista* init();
-Lista* insert(Lista* receba,char valor[]);
-Lista* removeFrom(Lista* deleted);
+Lista *liberaListaAndReset(Lista *head);
+Lista *init();
+Lista *insert(Lista *receba, char valor[]);
+Lista *removeFrom(Lista *deleted);
 void printAll(Lista *p);
 
 // TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
@@ -49,7 +49,7 @@ void printAll(Lista *p);
 
 int main(int argc, char *argv[])
 {
-    Lista* paths;
+    Lista *paths;
     paths = init();
     char line[MAX_LINE];
     char cwd[PATH_MAX];                            // salva o current working dir
@@ -85,8 +85,9 @@ int main(int argc, char *argv[])
 
             bool pipe_is_valid = true;
 
-            if(strcmp(args[0][0], "path") == 0){
-                fillPathsList(args[p],&paths);
+            if (strcmp(args[0][0], "path") == 0)
+            {
+                fillPathsList(args[p], &paths);
                 printAll(paths);
                 continue;
             }
@@ -136,7 +137,7 @@ int main(int argc, char *argv[])
                     fprintf(stderr, "Saindo do shell...\n");
                     exit(0);
                 }
-                execute(pipeline_args[0],paths);
+                execute(pipeline_args[0], paths);
                 continue;
             }
         }
@@ -381,7 +382,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         }
 
         // Lança o processo para o "comando atual"
-        pids[i] = launch_process(in_fd, out_fd, stages[i],NULL);
+        pids[i] = launch_process(in_fd, out_fd, stages[i], NULL);
 
         // Fecha os "pipes de escrita" no processo pai
         if (in_fd != STDIN_FILENO)
@@ -510,21 +511,26 @@ bool is_builtin(char *command)
         !strcmp(command, "ls"));
 }
 
-//Lida com o comando path
-void fillPathsList(char **args,Lista **paths){
+// Lida com o comando path
+void fillPathsList(char **args, Lista **paths)
+{
     *paths = liberaListaAndReset(*paths);
-    for(int i = 1; args[i] != NULL;i++){
-        printf("%s ",args[i]);
-        *paths = insert(*paths,args[i]);
+    for (int i = 1; args[i] != NULL; i++)
+    {
+        printf("%s ", args[i]);
+        *paths = insert(*paths, args[i]);
     }
     printf("passou");
 }
 
-int find_and_exec_command(char **args, Lista *paths_list) {
+int find_and_exec_command(char **args, Lista *paths_list)
+{
     // Caso 1: Comando já é um caminho absoluto ou relativo (e.g., "/bin/ls" ou "./my_script")
     // Se o primeiro argumento contém '/', tenta executá-lo diretamente.
-    if (strchr(args[0], '/') != NULL) {
-        if (execv(args[0], args) == -1) {
+    if (strchr(args[0], '/') != NULL)
+    {
+        if (execv(args[0], args) == -1)
+        {
             // Se falhar, imprime o erro específico (ex: "No such file or directory")
             perror(args[0]);
             return -1; // Indica que não foi possível executar
@@ -535,20 +541,23 @@ int find_and_exec_command(char **args, Lista *paths_list) {
     // Caso 2: Comando precisa ser buscado nos diretórios do PATH
     // (O comando não contém '/', e.g., "ls", "cat", "sum")
     char full_path[PATH_MAX]; // Buffer para construir o caminho completo
-    
-    Lista* current_path_node = paths_list; // Ponteiro para percorrer sua lista de PATHs
-    while (current_path_node != NULL) {
+
+    Lista *current_path_node = paths_list; // Ponteiro para percorrer sua lista de PATHs
+    while (current_path_node != NULL)
+    {
         // Constrói o caminho completo: "diretorio_do_path" + "/" + "comando"
         // snprintf é mais seguro que sprintf pois evita buffer overflow
         snprintf(full_path, PATH_MAX, "%s/%s", current_path_node->valor, args[0]);
 
         // Verifica se o arquivo existe e tem permissão de execução
-        if (access(full_path, X_OK) == 0) {
+        if (access(full_path, X_OK) == 0)
+        {
             // Encontrou o executável! Tenta executá-lo.
-            if (execv(full_path, args) == -1) {
+            if (execv(full_path, args) == -1)
+            {
                 // Se execv falhar (por exemplo, arquivo corrompido, permissão negada APÓS access)
                 perror(full_path); // Imprime o erro específico
-                return -1; // Indica falha na execução
+                return -1;         // Indica falha na execução
             }
             // execv só retorna em caso de erro. Se chegou aqui, o processo foi substituído.
         }
@@ -560,15 +569,18 @@ int find_and_exec_command(char **args, Lista *paths_list) {
     return -1; // Indica que o comando não foi encontrado/executado
 }
 
-//iniciar lista
-Lista* init(){
+// iniciar lista
+Lista *init()
+{
     return NULL;
 }
 
-//inserir novo elemento na lista
-Lista* insert(Lista* receba, char valor[]){
-    Lista* novo = (Lista*)malloc(sizeof(Lista));
-    if (novo == NULL) {
+// inserir novo elemento na lista
+Lista *insert(Lista *receba, char valor[])
+{
+    Lista *novo = (Lista *)malloc(sizeof(Lista));
+    if (novo == NULL)
+    {
         perror("Erro");
         return receba;
     }
@@ -576,31 +588,38 @@ Lista* insert(Lista* receba, char valor[]){
     novo->valor = strdup(valor);
     novo->prox = NULL; // O novo nó será o último
 
-    if (receba == NULL) {
-        return novo; 
-    } else {
+    if (receba == NULL)
+    {
+        return novo;
+    }
+    else
+    {
         // Percorre até o último nó
-        Lista* atual = receba;
-        while (atual->prox != NULL) {
+        Lista *atual = receba;
+        while (atual->prox != NULL)
+        {
             atual = atual->prox;
         }
         atual->prox = novo; // Anexa o novo nó ao final
-        return receba; // Retorna a cabeça original
+        return receba;      // Retorna a cabeça original
     }
 }
 
-//remover elemento da lista
-Lista* removeFrom(Lista* init){
-    Lista* novo;
+// remover elemento da lista
+Lista *removeFrom(Lista *init)
+{
+    Lista *novo;
     init = init->prox;
     return init;
 }
 
-//liberar lista toda
-Lista* liberaListaAndReset(Lista* head) {
-    Lista* current = head;
-    Lista* next_node;
-    while (current != NULL) {
+// liberar lista toda
+Lista *liberaListaAndReset(Lista *head)
+{
+    Lista *current = head;
+    Lista *next_node;
+    while (current != NULL)
+    {
         next_node = current->prox;
         free(current->valor);
         free(current);
@@ -609,23 +628,27 @@ Lista* liberaListaAndReset(Lista* head) {
     return NULL; // Retorna NULL para a nova cabeça da lista (vazia)
 }
 
-//verifica se a lista esta vazia
-int isEmpty(Lista* list){
-    if(list == NULL)
+// verifica se a lista esta vazia
+int isEmpty(Lista *list)
+{
+    if (list == NULL)
         return 1;
     return 0;
 }
 
-//debugar lista de paths
-void printAll(Lista *p){
-    int cont=0;
-    if(isEmpty(p)){
+// debugar lista de paths
+void printAll(Lista *p)
+{
+    int cont = 0;
+    if (isEmpty(p))
+    {
         printf("\nA lista esta vazia!\n");
         return;
     }
-    
-    while(p != NULL){
-        printf("\nElemento%d: %s ",cont+1,p->valor);
+
+    while (p != NULL)
+    {
+        printf("\nElemento%d: %s ", cont + 1, p->valor);
         p = p->prox;
         cont++;
     }
