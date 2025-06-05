@@ -29,7 +29,7 @@ int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1
 void print_args(char *row[]);
 bool is_builtin(char *comand);
 void execute(char **args, Lista *paths_list);
-void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count);
+void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, Lista *paths_list);
 pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list);
 int count_args(char **args);
 bool validate_command(char **args);
@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
                     }
                 }
                 if (pipe_is_valid)
-                    execute_pipeline(pipeline_args, stage_count);
+                    execute_pipeline(pipeline_args, stage_count, paths);
             }
             else if (pipe_is_valid)
             {
@@ -330,7 +330,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
 }
 
 // ! executa os comandos juntos chamando launch_process juntamente com pipes
-void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
+void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, Lista *paths_list)
 {
     int in_fd = STDIN_FILENO;
     int fd[2];
@@ -382,7 +382,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count)
         }
 
         // Lança o processo para o "comando atual"
-        pids[i] = launch_process(in_fd, out_fd, stages[i], NULL);
+        pids[i] = launch_process(in_fd, out_fd, stages[i], paths_list);
 
         // Fecha os "pipes de escrita" no processo pai
         if (in_fd != STDIN_FILENO)
