@@ -62,13 +62,15 @@ int main(int argc, char *argv[])
 
     FILE *input = stdin; // Entrada padrão
 
+    help();
+
     while (1)
     {
         if (getcwd(cwd, sizeof(cwd)) == NULL) // Obtém o diretório atual
             break;
 
         if (input == stdin) // Se a entrada for padrão, imprime o prompt
-            printf("%s $: ", cwd);
+            printf("MINI SHELL:%s $: ", cwd);
 
         if (fgets(line, sizeof(line), input) == NULL) // Lê uma linha da entrada
             break;
@@ -635,18 +637,20 @@ void printAll(Lista *p)
 // ! Função que exibe a ajuda do shell
 void help()
 {
+    printf("\n========== AJUDA DO SHELL ==========\n");
     printf("Comandos suportados:\n");
-    printf(" - Redirecionamento de saída com > é suportado.\n");
-    printf(" - Comandos podem ser encadeados com & e | para execução simultânea ou em pipeline.\n");
     printf(" - exit: Sai do shell.\n");
     printf(" - cd <diretorio>: Muda o diretório atual.\n");
     printf(" - pwd: Mostra o diretório atual.\n");
-    printf(" - path <diretorios>: Define os diretórios onde procurar comandos.\n");
+    printf(" - path [+ /novo/caminho] [- /caminho/a/remover]: Gerencia os diretórios onde procurar comandos.\n");
     printf(" - ls: Lista arquivos no diretório atual.\n");
     printf(" - cat <arquivo>: Exibe o conteúdo de um arquivo.\n");
-    printf(" - Comandos podem ser executados com caminhos absolutos ou relativos.\n");
+    printf(" - Redirecionamento de saída com > é suportado.\n");
+    printf(" - Comandos podem ser encadeados com & para execução simultânea.\n");
+    printf(" - Comandos podem ser encadeados com | para execução em pipeline.\n");
     printf(" - Argumentos devem ser separados por espaços, ex: ls -a -l.\n");
     printf(" - Para executar outros programas, use o caminho completo ou defina o PATH com o comando path.\n");
+    printf("====================================\n");
 }
 
 // ! Função que trata comandos internos do shell (built-in commands)
