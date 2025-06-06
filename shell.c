@@ -12,22 +12,24 @@
 #include <linux/limits.h>
 #include <stdbool.h>
 
-#define MAX_LINE 1024
+// ! Definições de constantes
+#define MAX_LINE 1024   // tamanho máximo da linha de entrada
 #define MAX_PROCS 10    // número máximo de processos (separados por &)
 #define MAX_ARGS 20     // número máximo de argumentos por processo
 #define BUFFER_SIZE 256 // tamanho máximo da linha de entrada
-#define MAX_STAGES 10
+#define MAX_STAGES 10   // número máximo de estágios em um pipeline
 
+// ! Estrutura para lista encadeada de caminhos
 typedef struct element
 {
     char *valor;
     struct element *prox;
 } Lista;
 
+// ! Prototipos de funcoes principais do shell
 int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1]);
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1]);
 void print_args(char *row[]);
-bool is_builtin(char *comand);
 void execute(char **args, Lista *paths_list);
 void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, Lista *paths_list);
 pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list);
@@ -35,48 +37,48 @@ int count_args(char **args);
 bool validate_command(char **args);
 int handle_output_file(char **args, char **output_file);
 void remove_output_file(char **args);
-void fillPathsList(char **args, Lista **paths);
 int find_and_exec_command(char **args, Lista *paths_list);
 void help();
 void process_command_line(char **command_group, Lista **paths);
 bool handle_builtin_command(char **args, Lista **paths);
 
-Lista *liberaListaAndReset(Lista *head);
+// ! Funções auxiliares para manipulação da lista de caminhos
 Lista *init();
 Lista *insert(Lista *receba, char valor[]);
-Lista *removeFrom(Lista *deleted);
+void handle_path_command(char **args, Lista **paths_list);
+Lista *remove_by_value(Lista *head, const char *value_to_remove);
+Lista *liberaListaAndReset(Lista *head);
+int isEmpty(Lista *list);
 void printAll(Lista *p);
 
 int main(int argc, char *argv[])
 {
-    Lista *paths = init();
-    // Você pode querer inicializar 'paths' com o PATH do sistema aqui:
-    // initialize_paths_from_environment(&paths);
+    Lista *paths = init(); // Inicializa a lista de caminhos
 
-    char line[MAX_LINE];
-    char cwd[PATH_MAX];
-    char *args[MAX_PROCS][MAX_ARGS + 1];
-    int procs = 0;
+    char line[MAX_LINE]; // Buffer para armazenar a linha de entrada
+    char cwd[PATH_MAX]; // Buffer para armazenar o diretório atual
+    char *args[MAX_PROCS][MAX_ARGS + 1]; // Array para armazenar os argumentos dos processos
+    int procs = 0; // Número de processos simultâneos
 
-    FILE *input = stdin;
+    FILE *input = stdin; // Entrada padrão
 
     while (1)
     {
-        if (getcwd(cwd, sizeof(cwd)) == NULL)
+        if (getcwd(cwd, sizeof(cwd)) == NULL) // Obtém o diretório atual
             break;
 
-        if (input == stdin)
+        if (input == stdin) // Se a entrada for padrão, imprime o prompt
             printf("%s $: ", cwd);
 
-        if (fgets(line, sizeof(line), input) == NULL)
+        if (fgets(line, sizeof(line), input) == NULL) // Lê uma linha da entrada
             break;
 
         if (line[0] == '\n' || line[0] == '\0') // Linha vazia
             continue;
 
-        procs = simultaneos_proc(line, args);
+        procs = simultaneos_proc(line, args); // Separa os processos simultâneos
 
-        for (int p = 0; p < procs; p++)
+        for (int p = 0; p < procs; p++) // Processa cada processo e pipeline com argumentos
             process_command_line(args[p], &paths);
     }
 
@@ -84,7 +86,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// separa e retorna o numero de processos simultaneos separados por &
+// ! Função que separa e retorna o numero de processos simultaneos separados por &
 int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1])
 {
     char *procs[MAX_PROCS];
@@ -123,10 +125,10 @@ int simultaneos_proc(char *input, char *out_args[MAX_PROCS][MAX_ARGS + 1])
             out_args[p][argc++] = tok_arg;
             tok_arg = strtok_r(NULL, " \t", &saveptr_arg);
         }
-        out_args[p][argc] = NULL; // argv-style
+        out_args[p][argc] = NULL;
     }
 
-    return proc_count;
+    return proc_count; // Retorna o número de processos encontrados
 }
 
 // ! funcao para debugar os args
@@ -147,7 +149,7 @@ void print_args(char *row[])
     printf("\n");
 }
 
-// separa e retorna o num de processos "dependentes" separados por |
+// ! Função que separa e retorna o num de processos "dependentes"/pipeline separados por |
 int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1])
 {
     int stage = 0, argc = 0;
@@ -175,18 +177,20 @@ int split_pipeline_args(char *in_args[], char *out_args[MAX_STAGES][MAX_ARGS + 1
     return stage + 1;
 }
 
-// ! func que executa comando simples, no caso comandos seperados por &
+// ! Função que executa comando simples
 void execute(char **args, Lista *paths_list)
 {
-    char *output_file = NULL;
-    int out_fd = STDOUT_FILENO;
+    char *output_file = NULL; // Variável para armazenar o nome do arquivo de saída, se houver
+    int out_fd = STDOUT_FILENO; // Descritor de arquivo para saída padrão
     int status;
 
+    // Trata o comando de redirecionamento para arquivo, se houver
     status = handle_output_file(args, &output_file);
 
     if (status == -1)
         return; // erro de sintaxe
 
+    // Se houver um arquivo de saída, abre-o para escrita, se não, usa a saída padrão
     if (output_file != NULL)
     {
         out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -197,6 +201,7 @@ void execute(char **args, Lista *paths_list)
         }
     }
 
+    // Lança o processo com os argumentos fornecidos
     pid_t pid = launch_process(STDIN_FILENO, out_fd, args, paths_list);
 
     if (out_fd != STDOUT_FILENO)
@@ -244,6 +249,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
             close(out_fd); // Fecha o descritor original
         }
 
+        // Verifica se o comando está na lista de paths
         if (find_and_exec_command(args, paths_list) == -1)
         {
             perror("Erro ao executar o comando");
@@ -257,12 +263,12 @@ pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
 // ! executa os comandos juntos chamando launch_process juntamente com pipes
 void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, Lista *paths_list)
 {
-    int in_fd = STDIN_FILENO;
-    int fd[2];
-    pid_t pids[MAX_STAGES];
-    char *output_file = NULL;
+    int in_fd = STDIN_FILENO; // Descritor de arquivo para entrada padrão
+    int fd[2]; // Descritores para o pipe
+    pid_t pids[MAX_STAGES]; // Array para armazenar os PIDs dos processos filhos
+    char *output_file = NULL; // Variável para armazenar o nome do arquivo de saída, se houver
     int status;
-    int last_out_fd = STDOUT_FILENO;
+    int last_out_fd = STDOUT_FILENO; // Descritor de arquivo para a saída do último comando
 
     for (int i = 0; i < stage_count; i++)
     {
@@ -271,7 +277,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, L
         // Se nao for o ultimo comando, cria um pipe para a saida
         if (i < stage_count - 1)
         {
-            remove_output_file(stages[i]); // remove o comando de redirecionamento para arquivo
+            remove_output_file(stages[i]); // remove o comando de redirecionamento para arquivo, pois nao eh suportado em pipeline complexa
 
             if (pipe(fd) == -1)
             {
@@ -282,6 +288,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, L
         }
         else // ultimo caso, escreve na saida padrao ou em um arquivo
         {
+            // Trata o comando de redirecionamento para arquivo, se houver
             status = handle_output_file(stages[i], &output_file);
             if (status == -1)
             {
@@ -289,6 +296,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, L
                 return;
             }
 
+            // Se houver um arquivo de saída, abre-o para escrita, se não, usa a saída padrão
             if (output_file != NULL)
             {
                 out_fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -300,7 +308,7 @@ void execute_pipeline(char *stages[MAX_STAGES][MAX_ARGS + 1], int stage_count, L
                     return;
                 }
             }
-            else
+            else // se nao houver arquivo de saida, usa a saida padrao
             {
                 out_fd = STDOUT_FILENO;
             }
@@ -389,6 +397,7 @@ int handle_output_file(char **args, char **output_file)
 {
     *output_file = NULL;
 
+    // Verifica se há um comando de redirecionamento para arquivo
     for (int i = 0; args[i] != NULL; i++)
     {
         if (strcmp(args[i], ">") == 0)
@@ -410,6 +419,7 @@ int handle_output_file(char **args, char **output_file)
     return 0; // Nao ha > nos argumentos
 }
 
+// ! remove o comando de redirecionamento para arquivo, pois nao eh suportado em pipeline complexa
 void remove_output_file(char **args)
 {
     for (int i = 0; args[i] != NULL; i++)
@@ -424,30 +434,7 @@ void remove_output_file(char **args)
     }
 }
 
-// verifica se eh um comando interno
-bool is_builtin(char *command)
-{
-    return (
-        !strcmp(command, "exit") ||
-        !strcmp(command, "cd") ||
-        !strcmp(command, "pwd") ||
-        !strcmp(command, "path") ||
-        !strcmp(command, "cat") ||
-        !strcmp(command, "ls"));
-}
-
-// Lida com o comando path
-void fillPathsList(char **args, Lista **paths)
-{
-    *paths = liberaListaAndReset(*paths);
-    for (int i = 1; args[i] != NULL; i++)
-    {
-        printf("%s ", args[i]);
-        *paths = insert(*paths, args[i]);
-    }
-    printf("passou");
-}
-
+// ! Função que encontra e executa o comando, seja por caminho absoluto/relativo ou pelo PATH
 int find_and_exec_command(char **args, Lista *paths_list)
 {
     // Caso 1: Comando já é um caminho absoluto ou relativo (e.g., "/bin/ls" ou "./my_script")
@@ -530,14 +517,6 @@ Lista *insert(Lista *receba, char valor[])
     }
 }
 
-// remover elemento da lista
-Lista *removeFrom(Lista *init)
-{
-    Lista *novo;
-    init = init->prox;
-    return init;
-}
-
 // liberar lista toda
 Lista *liberaListaAndReset(Lista *head)
 {
@@ -551,6 +530,80 @@ Lista *liberaListaAndReset(Lista *head)
         current = next_node;
     }
     return NULL; // Retorna NULL para a nova cabeça da lista (vazia)
+}
+
+// ! Função que trata o comando "path" para manipular a lista de caminhos
+void handle_path_command(char **args, Lista **paths_list)
+{
+    int argc = count_args(args);
+
+    if (argc == 1)
+    {
+        printf("PATH atual do shell:\n");
+        printAll(*paths_list);
+        return;
+    }
+
+    if (argc >= 3 && strcmp(args[1], "+") == 0)
+    {
+        for (int i = 2; i < argc; i++)
+        {
+            *paths_list = insert(*paths_list, args[i]);
+            printf("Adicionado: %s\n", args[i]);
+        }
+        return;
+    }
+
+    if (argc >= 3 && strcmp(args[1], "-") == 0)
+    {
+        for (int i = 2; i < argc; i++)
+        {
+            *paths_list = remove_by_value(*paths_list, args[i]);
+            // A função remove_by_value pode ser silenciosa ou modificada para retornar status
+            printf("Tentativa de remover: %s\n", args[i]);
+        }
+        return;
+    }
+
+    // Se nenhuma das opções acima, mostra o uso correto
+    fprintf(stderr, "Uso: path [+ /novo/caminho] [- /caminho/a/remover]\n");
+}
+
+// ! remove um elemento da lista pelo valor
+Lista *remove_by_value(Lista *head, const char *value_to_remove)
+{
+    if (head == NULL)
+        return NULL;
+
+    while (head != NULL && strcmp(head->valor, value_to_remove) == 0)
+    {
+        Lista *temp = head;
+        head = head->prox;
+        free(temp->valor);
+        free(temp);
+    }
+
+    // Se a lista ficou vazia
+    if (head == NULL)
+        return NULL;
+
+    Lista *current = head;
+    while (current->prox != NULL)
+    {
+        if (strcmp(current->prox->valor, value_to_remove) == 0)
+        {
+            Lista *temp = current->prox;
+            current->prox = temp->prox; // "Pula" o nó a ser removido
+            free(temp->valor);
+            free(temp);
+        }
+        else
+        {
+            current = current->prox; // Avança apenas se não houve remoção
+        }
+    }
+
+    return head;
 }
 
 // verifica se a lista esta vazia
@@ -579,6 +632,7 @@ void printAll(Lista *p)
     }
 }
 
+// ! Função que exibe a ajuda do shell
 void help()
 {
     printf("Comandos suportados:\n");
@@ -595,6 +649,7 @@ void help()
     printf(" - Para executar outros programas, use o caminho completo ou defina o PATH com o comando path.\n");
 }
 
+// ! Função que trata comandos internos do shell (built-in commands)
 bool handle_builtin_command(char **args, Lista **paths)
 {
     char *command = args[0];
@@ -607,24 +662,18 @@ bool handle_builtin_command(char **args, Lista **paths)
     }
     else if (strcmp(command, "cd") == 0)
     {
-        if (count_args(args) != 2)
+        if (chdir(args[1]) != 0)
         {
-            fprintf(stderr, "Uso: cd <diretorio>\n");
+            perror("Erro ao mudar de diretório");
         }
-        else
-        {
-            if (chdir(args[1]) != 0)
-            {
-                perror("Erro ao mudar de diretório");
-            }
-        }
+
         return true; // cd foi tratado
     }
     else if (strcmp(command, "path") == 0)
     {
-        fillPathsList(args, paths);
-        printf("\nCaminhos (paths) atualizados. Use 'path' para ver a lista.\n"); // Mensagem mais clara
-        return true; // path foi tratado
+        handle_path_command(args, paths);
+        printf("\nCaminhos (paths) atualizados. Use 'path' para ver a lista.\n"); 
+        return true;
     }
     else if (strcmp(command, "help") == 0)
     {

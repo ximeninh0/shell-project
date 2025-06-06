@@ -1,5 +1,4 @@
--rw-rw-r-- 1 luigi luigi  5896 mai 22 21:17 base_estudo.c
--rw-rw-r-- 1 luigi luigi  9442 jun  5 17:17 main.c
--rw-rw-r-- 1 luigi luigi 18395 jun  6 03:21 shell.c
--rw-rw-r-- 1 luigi luigi    85 mai 22 15:31 teste.c
-drwxrwxr-x 2 luigi luigi  4096 mai 22 10:11 .vscode
+.
+..
+LPI-Solucoes
+shell-project
