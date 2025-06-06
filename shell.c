@@ -64,6 +64,8 @@ int main(int argc, char *argv[])
 
     help();
 
+    handle_path_command((char *[]){"path", "+", "/bin", NULL}, &paths); // Adiciona o diretório /bin ao PATH
+
     while (1)
     {
         if (getcwd(cwd, sizeof(cwd)) == NULL) // Obtém o diretório atual
@@ -628,7 +630,7 @@ void printAll(Lista *p)
 
     while (p != NULL)
     {
-        printf("\nElemento%d: %s ", cont + 1, p->valor);
+        printf("\nElemento%d: %s \n", cont + 1, p->valor);
         p = p->prox;
         cont++;
     }
@@ -676,7 +678,6 @@ bool handle_builtin_command(char **args, Lista **paths)
     else if (strcmp(command, "path") == 0)
     {
         handle_path_command(args, paths);
-        printf("\nCaminhos (paths) atualizados. Use 'path' para ver a lista.\n"); 
         return true;
     }
     else if (strcmp(command, "help") == 0)
@@ -688,6 +689,7 @@ bool handle_builtin_command(char **args, Lista **paths)
     return false; // Não era um built-in conhecido
 }
 
+// ! Função que processa a linha de comando, separando e executando comandos e pipelines
 void process_command_line(char **command_group, Lista **paths)
 {
     char *pipeline_args[MAX_STAGES][MAX_ARGS + 1];
