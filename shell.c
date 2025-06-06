@@ -37,6 +37,9 @@ int handle_output_file(char **args, char **output_file);
 void remove_output_file(char **args);
 void fillPathsList(char **args, Lista **paths);
 int find_and_exec_command(char **args, Lista *paths_list);
+void help();
+void process_command_line(char **command_group, Lista **paths);
+bool handle_builtin_command(char **args, Lista **paths);
 
 Lista *liberaListaAndReset(Lista *head);
 Lista *init();
@@ -44,116 +47,40 @@ Lista *insert(Lista *receba, char valor[]);
 Lista *removeFrom(Lista *deleted);
 void printAll(Lista *p);
 
-// TODO validacao de erros, help, comandos exigidos pelo denis como cd, ls, ...
-// TODO comando cd atualmente nao funciona, utilizar a fun is_builtin para tratar e executa-lo
-
 int main(int argc, char *argv[])
 {
-    Lista *paths;
-    paths = init();
+    Lista *paths = init();
+    // Você pode querer inicializar 'paths' com o PATH do sistema aqui:
+    // initialize_paths_from_environment(&paths);
+
     char line[MAX_LINE];
-    char cwd[PATH_MAX];                            // salva o current working dir
-    char *args[MAX_PROCS][MAX_ARGS + 1];           // slip inicial da linha separando em comandos "simultaneos"
-    char *pipeline_args[MAX_STAGES][MAX_ARGS + 1]; // contem o que deve executado como processo ou sub processos
-    int stage_count;
+    char cwd[PATH_MAX];
+    char *args[MAX_PROCS][MAX_ARGS + 1];
     int procs = 0;
 
-    FILE *input = stdin; // para leitura constante do stdin
+    FILE *input = stdin;
 
     while (1)
     {
-        fflush(stdin);
-        stage_count = 0; // # stage_count contem o numero de proc de devem ser executados via pipe onde: proc_1 > stout >> proc_2 >stdin
-
-        if (getcwd(cwd, sizeof(cwd)) == NULL) // serve apenas para pegar o diretorio atual
+        if (getcwd(cwd, sizeof(cwd)) == NULL)
             break;
 
-        if (input == stdin) // printa o dir atual antes de pedir entrada
+        if (input == stdin)
             printf("%s $: ", cwd);
 
         if (fgets(line, sizeof(line), input) == NULL)
-            break; // ! sai em caso de erro na leitura
+            break;
 
-        if (line[0] == '\n' || line[0] == '\0')
+        if (line[0] == '\n' || line[0] == '\0') // Linha vazia
             continue;
 
         procs = simultaneos_proc(line, args);
 
         for (int p = 0; p < procs; p++)
-        {
-            stage_count = split_pipeline_args(args[p], pipeline_args);
-
-            bool pipe_is_valid = true;
-
-            if (strcmp(args[0][0], "path") == 0)
-            {
-                fillPathsList(args[p], &paths);
-                printAll(paths);
-                continue;
-            }
-
-            if (stage_count > 2)
-            {
-                fprintf(stderr, "Erro: pipeline com mais de 2 comandos nao suportada\n");
-                pipe_is_valid = false;
-                continue;
-            }
-            else
-            {
-                for (int s = 0; s < stage_count; s++)
-                {
-                    if (pipeline_args[s][0] == NULL)
-                    {
-                        fprintf(stderr, "Erro: pipeline vazia\n");
-                        continue;
-                    }
-
-                    if (!validate_command(pipeline_args[s]))
-                    {
-                        pipe_is_valid = false;
-                        continue;
-                    }
-                }
-            }
-
-            if (stage_count > 1 && pipe_is_valid)
-            {
-                for (int i = 0; i < stage_count; i++)
-                {
-                    if (strcmp(pipeline_args[i][0], "exit") == 0 || strcmp(pipeline_args[i][0], "cd") == 0)
-                    {
-                        fprintf(stderr, "Erro: %s nao pode ser excutado em um pipeline complexa\n", pipeline_args[i][0]);
-                        pipe_is_valid = false;
-                        break;
-                    }
-                }
-                if (pipe_is_valid)
-                    execute_pipeline(pipeline_args, stage_count, paths);
-            }
-            else if (pipe_is_valid)
-            {
-                if (strcmp(pipeline_args[0][0], "exit") == 0)
-                {
-                    fprintf(stderr, "Saindo do shell...\n");
-                    exit(0);
-                }
-                else if (strcmp(pipeline_args[0][0], "cd") == 0)
-                {
-                    if (chdir(pipeline_args[0][1]) != 0)
-                    {
-                        perror("Erro ao mudar de diretório");
-                    }
-                    // find_and_exec_command(pipeline_args[0], paths);
-                    continue;
-                }
-
-                execute(pipeline_args[0], paths);
-                continue;
-            }
-        }
+            process_command_line(args[p], &paths);
     }
-    printf("Saindo do shell...\n");
-    fclose(input); // Fecha o arquivo de entrada se não for stdin
+
+    printf("\nSaindo do shell...\n");
     return 0;
 }
 
@@ -316,7 +243,7 @@ pid_t launch_process(int in_fd, int out_fd, char **args, Lista *paths_list)
             }
             close(out_fd); // Fecha o descritor original
         }
-        
+
         if (find_and_exec_command(args, paths_list) == -1)
         {
             perror("Erro ao executar o comando");
@@ -649,5 +576,106 @@ void printAll(Lista *p)
         printf("\nElemento%d: %s ", cont + 1, p->valor);
         p = p->prox;
         cont++;
+    }
+}
+
+void help()
+{
+    printf("Comandos suportados:\n");
+    printf(" - Redirecionamento de saída com > é suportado.\n");
+    printf(" - Comandos podem ser encadeados com & e | para execução simultânea ou em pipeline.\n");
+    printf(" - exit: Sai do shell.\n");
+    printf(" - cd <diretorio>: Muda o diretório atual.\n");
+    printf(" - pwd: Mostra o diretório atual.\n");
+    printf(" - path <diretorios>: Define os diretórios onde procurar comandos.\n");
+    printf(" - ls: Lista arquivos no diretório atual.\n");
+    printf(" - cat <arquivo>: Exibe o conteúdo de um arquivo.\n");
+    printf(" - Comandos podem ser executados com caminhos absolutos ou relativos.\n");
+    printf(" - Argumentos devem ser separados por espaços, ex: ls -a -l.\n");
+    printf(" - Para executar outros programas, use o caminho completo ou defina o PATH com o comando path.\n");
+}
+
+bool handle_builtin_command(char **args, Lista **paths)
+{
+    char *command = args[0];
+
+    if (strcmp(command, "exit") == 0)
+    {
+        printf("Saindo do shell...\n");
+        liberaListaAndReset(*paths);
+        exit(0);
+    }
+    else if (strcmp(command, "cd") == 0)
+    {
+        if (count_args(args) != 2)
+        {
+            fprintf(stderr, "Uso: cd <diretorio>\n");
+        }
+        else
+        {
+            if (chdir(args[1]) != 0)
+            {
+                perror("Erro ao mudar de diretório");
+            }
+        }
+        return true; // cd foi tratado
+    }
+    else if (strcmp(command, "path") == 0)
+    {
+        fillPathsList(args, paths);
+        printf("\nCaminhos (paths) atualizados. Use 'path' para ver a lista.\n"); // Mensagem mais clara
+        return true; // path foi tratado
+    }
+    else if (strcmp(command, "help") == 0)
+    {
+        help();
+        return true; // help foi tratado
+    }
+
+    return false; // Não era um built-in conhecido
+}
+
+void process_command_line(char **command_group, Lista **paths)
+{
+    char *pipeline_args[MAX_STAGES][MAX_ARGS + 1];
+    int stage_count = split_pipeline_args(command_group, pipeline_args);
+
+    if (stage_count <= 0 || pipeline_args[0][0] == NULL)
+    {
+        // Pipeline inválido ou vazio
+        return;
+    }
+
+    if (stage_count > 2)
+    {
+        fprintf(stderr, "Erro: pipeline com mais de 2 comandos nao suportada nesta versão.\n");
+        return;
+    }
+
+    for (int s = 0; s < stage_count; s++)
+    {
+        if (!validate_command(pipeline_args[s]))
+        {
+            return; // Interrompe se a sintaxe de um comando for inválida
+        }
+
+        char *cmd = pipeline_args[s][0];
+        if (stage_count > 1 && (strcmp(cmd, "exit") == 0 || strcmp(cmd, "cd") == 0 || strcmp(cmd, "path") == 0 || strcmp(cmd, "help") == 0))
+        {
+            fprintf(stderr, "Erro: O comando '%s' não pode ser executado em um pipeline.\n", cmd);
+            return; // Interrompe se um built-in inválido for encontrado no pipeline
+        }
+    }
+
+    if (stage_count == 1)
+    {
+        if (!handle_builtin_command(pipeline_args[0], paths))
+        {
+            execute(pipeline_args[0], *paths);
+        }
+    }
+    else
+    {
+        execute_pipeline(pipeline_args, stage_count, *paths);
     }
 }
